@@ -117,9 +117,9 @@ And this is the biggest downside to using a map-backed form - you're left to han
 order_map = %{"id" => "", "qty" => ""}
 {% endhighlight %}
 
-This is a revealing line of code that to me signals we're headed down the wrong path. We're duplicating the knowledge of our database schema in our frontend code. If our schema ever changes, our form breaks and we need to update code in a lot of places to accommodate that change: Our schema would change, the map we use to make the form would change, and our handler would change. There's a lot of places for things to go wrong - ask me how I know! My first forms were mapped-backed forms and small updates to them can cause a lot of pain.
+This is a revealing line of code that to me signals we're headed down the wrong path. We're duplicating the knowledge of our database schema in our frontend code. If our schema ever changes, our form will break instantly and we'll need to update code in a lot of places to accommodate that change. A small change to the schema might mean a lot more work for us.
 
-So how could we make map-backed forms better? There might be a way to just pull out the fields from the struct and use that to create the map we back the form with. We might even be able to use `Map.from_struct` to make things easy. But this doesn't completely solve the issue of leaking the schema - we still need to know the types to cast to before we can insert into the database. What if I could define my form's types and validation rules in one place, and have the form handle the rest for me? Ecto has some more tricks up it's sleeve that can help us out here, and that's where our changeset-backed form comes in.
+So how could we make map-backed forms better? There might be a way to just pull out the fields from the struct and use that to create the map we back the form with. We might even be able to use `Map.from_struct/1` to make things easy. But this doesn't completely solve the issue of leaking the schema - we still need to know the types to cast to before we can insert into the database. What if I could define my form's types and validation rules in one place, and have the form handle the rest for me? Ecto has some more tricks up it's sleeve that can help us out here, and that's where our changeset-backed form comes in.
 
 ### Changeset-backed forms
 
@@ -177,7 +177,9 @@ A cool feature of Phoenix forms is that you can convert a changeset directly to 
 
 #### Do I Even Need a Database?
 
-Ecto supports [embedded schemas](https://hexdocs.pm/ecto/embedded-schemas.html), which means you aren't obligated to use Ecto with a database. Instead, your data can live in memory so you can get all of the validation and casting benefits of the changeset, without needing to insert that data into a database. Basically, even if you aren't using a database for your Phoenix app, you can still use Ecto to validate and cast your data!
+If you're not familiar with Ecto you might think that it's specifically meant to handle databases, and if we wanted to make our other forms changeset-backed, we would need to create schemas, changesets, and database tables for the data to live in. But that's not the case!
+
+Ecto supports [embedded schemas](https://hexdocs.pm/ecto/embedded-schemas.html), which means you aren't obligated to use Ecto with a database. Instead, your data can live in memory so you can get all of the validation and casting benefits of the changeset, without needing to insert that data into a database. You can use Ecto as purely a data validation layer. This means all you need is a schema and a changeset to power your forms.
 
 #### Creating a Changeset-Backed Form
 
