@@ -54,6 +54,7 @@ A map is just a key-value collection. Now, we'll pass this into `to_form/1` to g
 # order_live.ex
 defmodule OrderLive do
   use Phoenix.LiveView
+  use Phoenix.Component
 
   def mount(_params, _session, socket) do
     order_map = %{"id" => "", "qty" => ""}
@@ -84,6 +85,7 @@ So we've manually defined what fields our form has, created a form struct from t
 # order_live.ex
 defmodule OrderLive do
   use Phoenix.LiveView
+  use Phoenix.Component
 
   def mount(_params, _session, socket) do
     order_map = %{"id" => "", "qty" => ""}
