@@ -20,7 +20,6 @@ So let's take a look at our form module from the previous post:
 defmodule Order do
   use Ecto.Schema
 
-  @primary_key false
   schema "order" do
     field(:order_id, :string)
     field(:qty, :integer)
@@ -81,7 +80,6 @@ The `quote` block is where we define the code we want to inject. The `location: 
 defmodule Order do
   use PhoenixTypedForm
 
-  @primary_key false
   schema "order" do
     field(:order_id, :string)
     field(:qty, :integer)
@@ -237,7 +235,6 @@ end
 defmodule Order do
   use PhoenixTypedForm
 
-  @primary_key false
   schema "order" do
     field(:order_id, :string)
     field(:qty, :integer)
