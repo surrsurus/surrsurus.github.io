@@ -17,6 +17,7 @@ If you've used preprocessor macros in C or C++ before, you might be a little war
 So let's take a look at our form module from the previous post:
 
 {% highlight elixir %}
+# order.ex
 defmodule Order do
   use Ecto.Schema
 
@@ -230,7 +231,9 @@ defmodule PhoenixTypedForm do
     end
   end
 end
+{% endhighlight %}
 
+{% highlight elixir %}
 # order.ex
 defmodule Order do
   use PhoenixTypedForm
@@ -304,7 +307,9 @@ defmodule PhoenixTypedForm do
     end
   end
 end
+{% endhighlight %}
 
+{% highlight elixir %}
 # order.ex
 defmodule Order do
   use PhoenixTypedForm
@@ -331,6 +336,7 @@ end
 So how would we support a max quantity constraint? We need to allow the `changeset/2` function to support a custom `constraints` argument, and then allow `new_form` and `update_form` to pass them in. Then we can override our `changeset/2` to use the constraints. It'll look really similar to the previous example:
 
 {% highlight elixir %}
+# phoenix_typed_form.ex
 defmodule PhoenixTypedForm do
   defmacro __using__(_opts) do
     quote location: :keep do
@@ -376,7 +382,10 @@ defmodule PhoenixTypedForm do
     end
   end
 end
+{% endhighlight %}
 
+{% highlight elixir %}
+# order.ex
 defmodule Order do
   use PhoenixTypedForm
 
