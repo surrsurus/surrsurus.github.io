@@ -23,6 +23,7 @@ Phoenix provides a `Phoenix.Component.form/1` that can be used to render forms. 
 Say we have a schema for an order in our database. A super basic version of this schema would look like this:
 
 {% highlight elixir %}
+# order.ex
 defmodule Order do
   use Ecto.Schema
 
@@ -128,6 +129,7 @@ So how could we make map-backed forms better? There might be a way to just pull 
 I've been sidestepping around this, but let's talk about Ecto changesets. So remember when I mentioned Ecto is powerful? Here's where we get to see some of that. We created an order earlier that looks like this:
 
 {% highlight elixir %}
+# order.ex
 defmodule Order do
   use Ecto.Schema
 
@@ -149,6 +151,7 @@ And our problem is that we want to insert new orders into our database by lettin
 This is exactly what a changeset is for - a changeset takes in the struct you want to change and the list of changes you want to apply to it. It then compares the changes to the validation rules you've set up, and if there are any errors it picks them up. It can even try to cast types for you. When you try to `apply_action/2` to the changeset, it will either return the struct with the changes applied, or an error. So now our form becomes a lot more powerful - we can automatically cast and validate our form inputs, and then handle the changeset errors if any. You create changesets by writing changeset functions in your schema module. Here's what a super simple validation changeset would look like in our `Order` module:
 
 {% highlight elixir %}
+# order.ex
 defmodule Order do
   use Ecto.Schema
 
@@ -255,8 +258,8 @@ But our values don't seem to be showing up in the form. What's going on? Well, w
 
 {% highlight elixir %}
 # order_live.ex
-def handle_event("form_updated", %{"checkout_form" => form_params}, socket) do
-  form = %CheckoutForm{}
+def handle_event("form_updated", %{"order_form" => form_params}, socket) do
+  form = %OrderForm{}
   |> changeset(form_params)
   |> apply_action(:new)
   |> case do
