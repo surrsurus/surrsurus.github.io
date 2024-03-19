@@ -10,7 +10,7 @@ I've been working with [Elixir](https://elixir-lang.org/) for a couple years now
 
 That's not to say everything I've encountered in Phoenix is straightforward - one of the Phoenix concepts I've had problems with is forms. I thought forms were simple - You've got fields you want the user to fill out, you want to validate that data before moving forward, and then you want to do something with that data or tell the user they did something wrong. However, in practice I've found that forms can cause some pain if you aren't familiar with them. I'd like to talk about that pain, and how I've been able to make forms a lot easier to work with in Phoenix.
 
-In this article I'll be talking about how to create forms in Phoenix, and how we can leverage [changesets](https://hexdocs.pm/ecto/Ecto.Changeset.html) to make our forms more powerful. I'll also talk about how we can use changesets to power our forms in a way that's performant and keeps our frontends uncoupled with our database schemas. In the next article, we'll go over how we can extract this behavior into a macro we can use across all of our forms.
+In this article I'll be talking about how to create forms in Phoenix, and how we can leverage [changesets](https://hexdocs.pm/ecto/Ecto.Changeset.html) to make our forms more powerful. I'll also talk about how we can use changesets to power our forms in a way that's performant and keeps our frontend uncoupled with our database schemas. In the next article, we'll go over how we can extract this behavior into a macro we can use across all of our forms.
 
 ## What's Phoenix?
 
@@ -311,7 +311,7 @@ And you might also notice, we don't need to specifically handle errors! We can j
 
 ## Conclusion
 
-So we've seen how we can use changesets to power our forms in Phoenix. We can use the changeset to validate and cast our form inputs, and then our form can render any errors if present in the changeset. Best of all, we can do this in a way that lets us be performant and keep our frontends uncoupled with our database schemas. I would definitely advise you to jump right for the changeset-backed forms, and completely avoid the map-backed forms. Changeset-backed forms still work even when you don't have a database.
+So we've seen how we can use changesets to power our forms in Phoenix. We can use the changeset to validate and cast our form inputs, and then our form can render any errors if present in the changeset. Best of all, we can do this in a way that lets us be performant and keep our frontend uncoupled with our database schemas. I would definitely advise you to jump right for the changeset-backed forms, and completely avoid the map-backed forms. Changeset-backed forms still work even when you don't have a database.
 
 This is awesome, but we could go further - any other forms we make are going to want that same method to validating and casting inputs. We don't want to copy around the same behavior everywhere, if the behavior for forms needs to be updated or have a feature added, we'd have to change it in a lot of places. Thankfully Elixir has a great way to handle this - macros.
 

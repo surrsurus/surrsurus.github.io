@@ -6,11 +6,11 @@ cover: /assets/phx-banner.png
 categories: elixir phoenix ui
 ---
 
-This is a continuation of my [previous post](https://surrsurus.github.io/elixir/phoenix/ui/2024/03/13/phoenix-typed-forms-pt-1.html) where I go over the different ways to create a form in [Phoenix](https://www.phoenixframework.org/). In this post, we're going to take the changeset-backed form behavior we built and turn it into a macro that can be used across all of our form modules.
+This is a continuation of my [previous post](https://surrsurus.github.io/elixir/phoenix/ui/2024/03/13/phoenix-typed-forms-pt-1.html) where I go over the different ways to create a form in [Phoenix](https://www.phoenixframework.org/). In this post, we're going to take the changeset-backed form behavior we built and turn it into a macro that can be used across all of our form modules. Then, we're going to extend the macro to support default values, custom changesets, and runtime constraints.
 
 ## Elixir Macros
 
-If you've used preprocessor macros in C or C++ before, you might be a little wary of macros in general. But there's not much to be worried about - Elixir macros are more similar to Lisp macros. Macros are functions that are executed at compile-time and transform Elixir code before it's executed. They are a way to extend the language itself and introduce new syntax or behaviors. They're a lot like regular elixir functions, but they produce code as output. They're a great way to reduce boilerplate and make your code DRY-er, and that's exactly what we're gonna use them for. We've identified that all of our forms are going to want the same `changeset/2` function, so now we can use a macro to inject that behavior into all of our form modules.
+If you've used preprocessor macros in C or C++ before, you might be a little wary of macros in general. There's not much to be worried about - Elixir macros are more akin to Lisp macros than C macros. Elixir macros are functions that are executed at compile-time and transform Elixir code before it's executed. They're used typically to extend the language itself and introduce new syntax or behaviors. Macros work a lot like regular elixir functions, but they produce code as output - they're a great way to reduce boilerplate and make your code DRY-er, and that's exactly what we're gonna use them for.
 
 ## The Phoenix Typed Form Macro
 
@@ -40,7 +40,7 @@ defmodule Order do
 end
 {% endhighlight %}
 
-If our schema ever changes, we'll never need to change our `changeset/2` function. It's always going to be the same. Think about a totally different form, like a user form. Our changeset is still going to want to pull the fields from the schema and cast data against the fields' types. So our first macro is going to be a simple one that injects this behavior into our form modules:
+If our schema ever changes, we'll never need to update our `changeset/2` function. It's always going to work for whatever schema is defined, because it's not caring about the individual fields. This is a great candidate for a macro. We can create a macro that will inject the `changeset/2` function into our form module, and then we can use that macro in all of our form modules. This will make our form modules a lot simpler, and we won't have to worry about updating them when our schema changes. Here's what our macro will look like:
 
 {% highlight elixir %}
 # phoenix_typed_form.ex
@@ -50,8 +50,7 @@ defmodule PhoenixTypedForm do
       use Ecto.Schema
       use Phoenix.Component
       import Ecto.Changeset
-      # Will bring in the `def_typed_form` macro to the caller module
-      import unquote(__MODULE__)
+      import PhoenixTypedForm
     end
   end
 
@@ -70,11 +69,13 @@ defmodule PhoenixTypedForm do
 end
 {% endhighlight %}
 
-We're going to call this macro `PhoenixTypedForm`, because our schema is going to define the types we expect to get from the form, and the changeset will enforce it. 
+We're going to call this macro `PhoenixTypedForm`, because our schema is going to define the types we expect to get from the form, and the changeset will enforce it. We'll give it the `Phoenix` prefix because that adheres to [Hex.pm's naming guidelines](https://hex.pm/docs/publish) since we're providing functionality on top of the existing Phoenix forms.
 
-So let's talk about the syntax of macros. When we `use` a macro, we're implicitly calling the `__using__` function in the macro module. This is where we're going to inject the behavior we want into our form modules. So we just want to inject some default behavior, which in our case is importing the modules we need. We can also use the use block to import the macro module to make `def_typed_form` available to the caller. We're having that macro be invoked so that `__MODULE__` will be able to reference the type created by the Ecto schema. Since macros are compile time, the `use Ecto.Schema` macro won't have executed by the time we try to see what type `__MODULE__` is.
+So let's talk about the syntax of macros. We've got two different macros here - `__using__` and `def_typed_form`. When we `use` a macro, we're implicitly calling the `__using__` function in the macro module. You've seen this before, when we `use Ecto.Schema` we're not just bringing in the `Ecto.Schema` module, we're executing a macro. In our case, we're just using the `__using__` block to inject some common imports. We can also use the `__using__` block to import the `PhoenixTypedForm` module to make `def_typed_form` available to the caller. This basically means we don't need to `use PhoenixTypedForm` and also `import PhoenixTypedForm` at the same time.
 
-The `quote` block is where we define the code we want to inject. The `location: :keep` option is a way to tell the compiler to keep the line numbers of the code we're injecting the same as the line numbers of the macro. This is useful for debugging - if something blows up in the macro the Elixir runtime will let us know where. So in summary what this code will do is bring in our `changeset/2` function to our form module. Our form module gets a lot simpler:
+The reason why we don't put all of `def_typed_form` into the use block is because of compile time constraints. Our macros run at compile time, and we're referencing the `__MODULE__` struct that `use Ecto.Schema` creates for us, before we've given it a chance to actually create it. We'll see a `Order.__struct__/0 is undefined` error pop up if we try to do this. So the idea is we're having that macro be invoked by the module so that `__MODULE__` will be able to properly reference the struct.
+
+The `quote` block inside our macros is where we define the code we want to inject. The `location: :keep` option is a way to tell the compiler to keep the line numbers of the code we're injecting the same as the line numbers of the macro. This is useful for debugging - if something blows up in the macro the Elixir runtime will let us know where. So in summary what this code will do is bring in our `changeset/2` function to our form module. Our form module gets a lot simpler:
 
 {% highlight elixir %}
 # order.ex
@@ -126,7 +127,9 @@ defmodule OrderLive do
 end
 {% endhighlight %}
 
-And that's it! Our form module is now a lot simpler, and our LiveView code doesn't need to change. We've cleanly separated our behavior from our schema, and now all we have to do to create more forms is to use our `PhoenixTypedForm` module. This is really nice because our `Order` becomes a record of what we expect to be getting from the forms, the macro enforces it, and the LiveView just has to manage the form state. Each piece doesn't have to care about what the other looks like or what they're doing. But that `handle_event` is clearly doing too much. Similarly to our changeset function, we'll probably be copying and pasting that everywhere and that's not ideal. But also because of this function, we need to import `Ecto.Changeset` into our LiveView. This hints that we should be moving this functions into our form module, which means we should be extending our macro.
+And that's it! Now that we've cleanly separated our behavior from our schema, all we have to do to create more forms is to use our `PhoenixTypedForm` module. This is really nice because our `Order` becomes a record of what we expect to be getting from the forms, the macro enforces it, and the LiveView just has to manage the form state. Each piece doesn't have to care about what the other looks like or what they're doing, and they each have a clear responsibility - the `Order` module encodes the structure of the form, the `PhoenixTypedForm` module encodes the behavior, and the LiveView encodes the state.
+
+Taking a step back, we can see that `handle_event` is clearly doing too much. We're creating a new form, applying the changeset, and converting it to a form, and handling errors all in one function. Similarly to our changeset function, we'll probably be copying and pasting that behavior everywhere and that's not ideal. Another thing to note is that because of this function, we need to import `Ecto.Changeset` into our LiveView, which is a definite code smell - this hints that we should be moving this functions into our form module, which means we should be extending our macro.
 
 ### Some Minor Improvements
 
@@ -139,7 +142,7 @@ defmodule PhoenixTypedForm do
     quote location: :keep do
       use Ecto.Schema
       import Ecto.Changeset
-      import unquote(__MODULE__)
+      import PhoenixTypedForm
     end
   end
 
@@ -189,7 +192,7 @@ defmodule OrderLive do
 end
 {% endhighlight %}
 
-We've turned our mount and event handler into one line functions. This is a lot cleaner and easier to read than what we had before, and we've also removed the need to import `Ecto.Changeset` into our LiveView.
+We've turned our mount and event handler into one line functions. This is a lot cleaner and easier to read than what we had before, and we've also removed the need to import `Ecto.Changeset` into our LiveView. Our behavior is moving into our macro, and as a result our LiveView keeps getting simpler.
 
 ## Extending the Macro Further
 
@@ -197,7 +200,7 @@ So we've got a macro to help us create forms, but a real frontend is going to re
 
 1. Default values - Creating a `new_form/0` will give you an entirely blank, empty form but chances are we can autofill some data for the user depending on the screen. We should be able to support a set of `default_values` that will be used to fill in the form if the developer doesn't provide them.
   
-2. Custom changesets - We're not gonna get very far by just validatng types! Think about the example form with name and age - should age be negative? Probably not! We should be able to override the default `changeset/2` with a custom one that can add more complex validation rules.
+2. Custom changesets - We're not gonna get very far by just validating types! Think about the example form with name and age - should age be negative? Probably not! We should be able to override the default `changeset/2` with a custom one that can add more complex validation rules.
 
 3. Runtime constraints - The final issue is a bit complex. Let's reconsider our checkout form. Let's say we want quantity to both be positive, and less than the remaining stock. The problem with this is our macro runs at compile time, so how could we handle constraints that change over time or from user to user? We should be able to support a set of optional runtime `constraints` that can be used to validate the form's input against even more complex rules.
 
@@ -212,7 +215,7 @@ defmodule PhoenixTypedForm do
     quote location: :keep do
       use TypedEctoSchema
       import Ecto.Changeset
-      import unquote(__MODULE__)
+      import PhoenixTypedForm
     end
   end
 
@@ -253,11 +256,13 @@ defmodule Order do
 end
 {% endhighlight %}
 
-`Module.put_attribute/3` is a way to set a module attribute at compile time. We're using it to store the `default_values` that are passed to the macro. We then merge these with the `attrs` passed to `new_form/1` to create the initial form object. Now if we call `MyForm.new_form()`, we'll get a form object with the default values filled in. We also still have the ability to optionally pass these in to `new_form/1` at runtime if we so desire, and they'll override the defaults.
+We're using some new macro features here, namely `Module.put_attribute/3` and `unquote`. `Module.put_attribute/3` is a way to set a module attribute at compile time. An attribute is a piece of metadata that can be attached to a module, and it can be accessed at runtime. They can be used as constants, but also as annotations and temporary storage during compilation (for more complicated macros). We're using it as a constant to store the `default_values` that are passed to the macro. We then merge these with the `attrs` passed to `new_form/1` to create the initial form object. Now if we call `MyForm.new_form()`, we'll get a form object with the default values filled in. We also still have the ability to optionally pass these in to `new_form/1` at runtime if we so desire, and they'll override the defaults.
+
+The `unquote` function is used within macros to inject dynamic values into the generated code. When you're defining a macro and want to include a value that is determined at runtime, you can use unquote to splice that value directly into the code. Here we're using it to inject our `opts`, which is a keyword list of options that the user can pass to the `def_typed_form` macro. We're using the `unquote` function to inject the value of `opts` into the generated code. Our `default_values` is just an option that the user can pass to the macro.
 
 ### Custom Changesets
 
-It would be awesome if we could override our default `changeset/2` with a custom one. We can do this with Elixir's `defoverride`:
+It would be awesome if we could override our default `changeset/2` with a custom one. We can do this with Elixir's `defoverridable`:
 
 {% highlight elixir %}
 # phoenix_typed_form.ex
@@ -266,7 +271,7 @@ defmodule PhoenixTypedForm do
     quote location: :keep do
       use TypedEctoSchema
       import Ecto.Changeset
-      import unquote(__MODULE__)
+      import PhoenixTypedForm
     end
   end
 
@@ -331,9 +336,13 @@ defmodule Order do
 end
 {% endhighlight %}
 
+`defoverridable` is our new keyword, but it's not macro specific. `defoverridable` just marks the given function as able to be overridden. Overriden functions are lazily evaluated, which means that the function that is called is determined at runtime. 
+
+This is a way to allow the user to override the default `changeset/2` with a custom one. We're also using the `validate_number` function from `Ecto.Changeset` to add a custom validation rule to our changeset. Now, if the user tries to submit a negative quantity, the form will show an error. So we've given the ability to have a default changeset, but also the ability to override it with a custom one for more complex validation rules.
+
 ### Runtime Constraints
 
-So how would we support a max quantity constraint? We need to allow the `changeset/2` function to support a custom `constraints` argument, and then allow `new_form` and `update_form` to pass them in. Then we can override our `changeset/2` to use the constraints. It'll look really similar to the previous example:
+So how would we support a max quantity constraint? Well it's likely that our max quantity would change over time as we sell off inventory and get more deliveries. What we want, is we want to allow the `changeset/2` function to support a custom `constraints` argument, and then allow `new_form` and `update_form` to pass them in. Then we can override our `changeset/2` to use the constraints we're giving in the moment. It'll look really similar to the previous example:
 
 {% highlight elixir %}
 # phoenix_typed_form.ex
@@ -342,7 +351,7 @@ defmodule PhoenixTypedForm do
     quote location: :keep do
       use TypedEctoSchema
       import Ecto.Changeset
-      import unquote(__MODULE__)
+      import PhoenixTypedForm
     end
   end
 
@@ -405,7 +414,7 @@ defmodule Order do
 end
 {% endhighlight %}
 
-Now, if your page fetched the remaining stock from the server on load, you could pass it into the form when you create or update the form. If the user tries to submit a quantity greater than the remaining stock, the form will show an error. Now, you could also keep changing your max_qty constraint as the user interacts with the page, and the form show an error whenever that constraint is violated. But we talked about this earlier, the actual act of validation really shouldn't change between form updates because it would be a really weird user experience.
+You can see we've added the optional list of `constraints` to our functions. Now, if your page fetched the remaining stock from the server on load, you could pass it into the form when you create or update the form. If the user tries to submit a quantity greater than the remaining stock, the form will show an error. Now, you could also keep changing your max_qty constraint as the user interacts with the page, and the form show an error whenever that constraint is violated. But we talked about this earlier, the actual act of validation really shouldn't change between form updates because it would be a really weird user experience.
 
 ## Putting it all together - The Phoenix Typed Form hex package
 
