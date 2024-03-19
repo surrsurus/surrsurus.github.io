@@ -8,7 +8,7 @@ categories: elixir phoenix ui
 
 I've been working with [Elixir](https://elixir-lang.org/) for a couple years now, and in that time I've built a handful of web applications with it - all of them powered by [Phoenix](https://www.phoenixframework.org/). I've used React + Redux before Phoenix (specifically [LiveView](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html)), and I found Elixir and Phoenix very easy to pick up. I've been able to build complex web applications faster and with less code than I typically would need in React. 
 
-That's not to say everything I've encountered in Phoenix is straightforward - one of the Phoenix concepts I've had problems with is forms. I thought forms were pretty simple - You've got fields you want the user to fill out, you want to validate that data before moving forward, and then you want to do something with that data or tell the user they did something wrong. But in practice, I've found that forms can cause some pain if you aren't familiar with them. I'd like to talk about that pain, and how I've been able to make forms a lot easier to work with in Phoenix.
+That's not to say everything I've encountered in Phoenix is straightforward - one of the Phoenix concepts I've had problems with is forms. I thought forms were simple - You've got fields you want the user to fill out, you want to validate that data before moving forward, and then you want to do something with that data or tell the user they did something wrong. However, in practice I've found that forms can cause some pain if you aren't familiar with them. I'd like to talk about that pain, and how I've been able to make forms a lot easier to work with in Phoenix.
 
 In this article I'll be talking about how to create forms in Phoenix, and how we can leverage [changesets](https://hexdocs.pm/ecto/Ecto.Changeset.html) to make our forms more powerful. I'll also talk about how we can use changesets to power our forms in a way that's performant and keeps our frontends uncoupled with our database schemas. In the next article, we'll go over how we can extract this behavior into a macro we can use across all of our forms.
 
@@ -91,7 +91,7 @@ Our `mount/3` is called whenever someone loads the page for the first time, or o
 
 HEEx is just Elixir's version of html templates. If you've used React, this is effectively JSX for Elixir. You've got an HTML template you can embed code in, and you can call components you can pass properties into, except elixir calls these properties "assigns", because they get 'assigned' to your websocket connection with the LiveView. Your browser can then piece together the HTML and the assigns from the websocket to render the page. Phoenix will automatically pair a template with a LiveView if they have the same name, so `order_live.html.heex` is the template for the `order_live.ex` LiveView.
 
-So we've manually defined what fields our form has, created a form struct from the map, and rendered the form in our LiveView. But there are a few problems with this approach. Our form data (`form_params`) is going to come back as a map where the keys are the same as our `order_map` but the values are the strings the user entered in the form. Because of this, we have to manually handle all of the type validation and any casting ourselves. Whenever our form changes, an event is fired named `form_updated` that we'll need to write a handler for:
+So we've manually defined what fields our form has, created a form struct from the map, and rendered the form in our LiveView, but there are a few problems with this approach. Our form data (`form_params`) is going to come back as a map where the keys are the same as our `order_map` but the values are the strings the user entered in the form. Because of this, we have to manually handle all of the type validation and any casting ourselves. Whenever our form changes, an event is fired named `form_updated` that we'll need to write a handler for:
 
 {% highlight elixir %}
 # order_live.ex
@@ -134,7 +134,7 @@ order_map = %{"id" => "", "qty" => ""}
 
 This is a revealing line of code that to me signals we're headed down the wrong path and map-backed forms are not the way to go about this. We're duplicating the knowledge of our database schema in our frontend code. If our schema ever changes, our form will break instantly and we'll need to update code in a lot of places to accommodate that change. A small change to the schema might mean a lot more work for us.
 
-So how could we make map-backed forms better? There might be a way to just pull out the fields from the struct and use that to create the map we back the form with. We might even be able to use `Map.from_struct/1` to make things easy. But this doesn't completely solve the issue of leaking the schema - we still need to know the types to cast to before we can insert into the database. What if I could define my form's types and validation rules in one place, and have the form handle the rest for me? Ecto has some more tricks up it's sleeve that can help us out here, and that's where our changeset-backed form comes in.
+So how could we make map-backed forms better? There might be a way to just pull out the fields from the struct and use that to create the map we back the form with. We might even be able to use `Map.from_struct/1` to make things easy, but this doesn't completely solve the issue of leaking the schema - we still need to know the types to cast to before we can insert into the database. What if I could define the form's types and validation rules in one place, and have the form handle the rest for me? Ecto has some more tricks up it's sleeve that can help us out here, and that's where our changeset-backed form comes in.
 
 ### Changeset-backed forms
 
@@ -162,7 +162,7 @@ end
 
 And our problem is that we want to insert new orders into our database by letting users submit their order via a form. As I've said before problem with that is we'll get back all of our data as strings, and we'll need to convert them to the correct types before we can insert them into the database. So what if we could check the set of changes against the types we define in the schema *before* we try to insert them all into a struct?
 
-This is exactly what a changeset is for - a changeset takes in the struct you want to change and the list of changes you want to apply to it. It then compares the changes to the validation rules you've set up, and if there are any errors it picks them up. It can even try to cast types for you. When you try to `apply_action/2` to the changeset, it will either return the struct with the changes applied, or an error. So now our form becomes a lot more powerful - we can automatically cast and validate our form inputs, and then handle the changeset errors if any. You create changesets by writing changeset functions in your schema module. Here's what a super simple validation changeset would look like in our `Order` module:
+This is exactly what a changeset is for - a changeset takes in the struct you want to change and the list of changes you want to apply to it. It then compares the changes to the validation rules you've set up, and if there are any errors it picks them up. It can even try to cast types for you. When you try to `apply_action/2` to the changeset, it will either return the struct with the changes applied, or an error. So now our form becomes a lot more powerful - we can automatically cast and validate our form inputs, and then handle the changeset errors if any. You create changesets by writing changeset functions in your schema module. Here's what a basic validation changeset would look like in our `Order` module:
 
 {% highlight elixir %}
 # order.ex
@@ -194,13 +194,13 @@ A cool feature of Phoenix forms is that you can convert a changeset directly to 
 
 #### Do I Even Need a Database?
 
-If you're not familiar with Ecto you might think that it's specifically meant to handle databases, and if we wanted to make our other forms changeset-backed, we would need to create schemas, changesets, and database tables for the data to live in. But that's not the case!
+If you're not familiar with Ecto you might think that it's specifically meant to handle databases, and if we wanted to make our other forms changeset-backed, we would need to create schemas, changesets, and database tables for the data to live in - but that's not the case!
 
 Ecto supports [embedded schemas](https://hexdocs.pm/ecto/embedded-schemas.html), which means you aren't obligated to use Ecto with a database. Instead, your data can live in memory so you can get all of the validation and casting benefits of the changeset, without needing to insert that data into a database. You can use Ecto as purely a data validation layer. This means all you need is a schema and a changeset to power your forms.
 
 #### Creating a Changeset-Backed Form
 
-So we have our order schema, and we have a changeset function that can create a changeset to validate and cast our form inputs. But how do we use this in our LiveView? Rendering a form is simple, we can take the result of our changeset and pass it to the form component in the HEEx:
+So we have our order schema, and we have a changeset function that can create a changeset to validate and cast our form inputs. How do we use this in our LiveView? Phoenix makes rendering a form easy, we can take the result of our changeset and pass it to the form component in the HEEx:
 
 {% highlight elixir %}
 # order_live.ex
@@ -223,15 +223,15 @@ end
 </.form>
 {% endhighlight %}
 
-Here, a form is being created on the fly (named `f`) for the changeset we pass into this component. Now this is pretty much exactly what I want to get out of these forms, we pass in a `@changeset` to the form that we can get from our `changeset/2` function, and the form handles the rest. It's very simple. So of course this approach is actually discouraged in the [Phoenix docs](https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html#form/1-using-the-for-attribute)! The docs say this approach is bad for two reasons:
+Here, a form is being created on the fly (named `f`) for the changeset we pass into this component. Now this is pretty much exactly what I want to get out of these forms, we pass in a `@changeset` to the form that we can get from our `changeset/2` function, and the form handles the rest. So of course this approach is actually discouraged in the [Phoenix docs](https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html#form/1-using-the-for-attribute)! The docs say this approach is bad for two reasons:
 
 > 1. LiveView can better optimize your code if you access the form fields using `@form[:field]` rather than through the let-variable `form`
 > 
 > 2. Ecto changesets are meant to be single use. By never storing the changeset in the assign, you will be less tempted to use it across operations
 
-I don't have much to add to the first point. `:let` seems convenient but I don't know enough about how Phoenix works under the hood to say if something is performant or not. But I can see the second point being a problem - The changeset *result* is meant to be a single use object, and it's not really a good idea to be storing temporary things in your LiveView socket assigns. But, I want to use my changeset *function* to validate my form whenever it updates, because the actual act of validation doesn't change between form updates - that would just be a really weird user experience.
+I don't have much to add to the first point. `:let` seems convenient but I don't know enough about how Phoenix works under the hood to say if something is performant or not. I can see the second point being a problem - The changeset *result* is meant to be a single use object, and it's not really a good idea to be storing temporary things in your LiveView socket assigns. So what we really want is to use our changeset *function* to validate the form whenever it updates, because the actual act of validation doesn't change between form updates - that would just be a really weird user experience.
 
-But there has to be a way we can use changesets to power our forms. How can we avoid these pitfalls? 
+There has to be a way we can use changesets to power our forms. How can we avoid these pitfalls? 
 
 ## Performant Changeset-Backed Forms
 
@@ -268,7 +268,7 @@ And our HEEx looks like this:
 </.form>
 {% endhighlight %}
 
-But our values don't seem to be showing up in the form. What's going on? Well, when `to_form/1` is called, it copies over data from the changeset to the form struct, but it doesn't seem to pick up the changes! We need to commit the changes first to the changeset before we can convert it to a form. We can do this by applying the `:new` action to the changeset. But we should remember that `apply_action/2` can fail. So our LiveView code becomes this:
+However our values don't seem to be showing up in the form. What's going on? Well, when `to_form/1` is called, it copies over data from the changeset to the form struct, but it doesn't seem to pick up the changes! We need to commit the changes first to the changeset before we can convert it to a form. We can do this by applying the `:new` action to the changeset, but we should remember that `apply_action/2` can fail. So our LiveView code becomes this:
 
 {% highlight elixir %}
 # order_live.ex
