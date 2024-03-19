@@ -6,19 +6,31 @@ cover: /assets/phx-banner.png
 categories: elixir phoenix ui
 ---
 
-I've been working with [Elixir](https://elixir-lang.org/) for a couple years now, and in that time I've built a handful of web applications with it - all of them powered by [Phoenix](https://www.phoenixframework.org/). I've used a few different frontend frameworks in the past, and Phoenix (specifically [LiveView](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html)) has been my favorite so far. I've been able to build some really complex UIs with it, with a lot less code than I would have needed with a more common framework, and I find I'm able to reason about LiveViews a lot easier than I am able to reason about React + Redux.
+I've been working with [Elixir](https://elixir-lang.org/) for a couple years now, and in that time I've built a handful of web applications with it - all of them powered by [Phoenix](https://www.phoenixframework.org/). I've used React + Redux before Phoenix (specifically [LiveView](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html)), and I found Elixir and Phoenix very easy to pick up. I've been able to build complex web applications faster and with less code than I typically would need in React. 
 
-But one of the Phoenix concepts I've had problems with is forms. I thought forms were pretty simple - You've got fields you want the user to fill out, you want to validate that data before moving forward, and then you want to do something with that data or tell the user they did something wrong. But in practice, I've found that forms can cause some pain if you aren't familiar with them. I'd like to talk about that pain, and how I've been able to make forms a lot easier to work with in Phoenix.
+That's not to say everything I've encountered in Phoenix is straightforward - one of the Phoenix concepts I've had problems with is forms. I thought forms were pretty simple - You've got fields you want the user to fill out, you want to validate that data before moving forward, and then you want to do something with that data or tell the user they did something wrong. But in practice, I've found that forms can cause some pain if you aren't familiar with them. I'd like to talk about that pain, and how I've been able to make forms a lot easier to work with in Phoenix.
+
+In this article I'll be talking about how to create forms in Phoenix, and how we can leverage [changesets](https://hexdocs.pm/ecto/Ecto.Changeset.html) to make our forms more powerful. I'll also talk about how we can use changesets to power our forms in a way that's performant and keeps our frontends uncoupled with our database schemas. In the next article, we'll go over how we can extract this behavior into a macro we can use across all of our forms.
 
 ## What's Phoenix?
 
-Let's take a second to introduce Phoenix if you aren't familiar. Phoenix is a powerful web framework written in Elixir, a functional programming language built on the Erlang VM. Elixir has a great concurrency model it inherits from Erlang - the concept is that each process is a lightweight 'unit of execution' managed by the Erlang VM. Processes are incredibly easy to spin up and tear down, so much so that a common way of handling failure in Elixir is to just let a process die and have it's supervisor (a process that monitors other processes) spin it back up. Phoenix takes advantage of this with [LiveView](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html) where each user gets their own websocket connection to a LiveView process in the server. And since your users are connected with a websocket, you can push 'live' updates to the client in real time. This is a really powerful model for building web applications, and I'm a really big fan of it. Now back to forms.
+Let's take a second to introduce Phoenix if you aren't familiar. Phoenix is a powerful web framework written in Elixir, a functional programming language built on the Erlang VM. Elixir has a great concurrency model it inherits from Erlang - the concept is that each process is a lightweight 'unit of execution' managed by the Erlang VM. Processes are incredibly easy to spin up and tear down, so much so that a common way of handling failure in Elixir is to just let a process die and have it's supervisor (a process that monitors other processes) spin it back up. Phoenix takes advantage of this with [LiveView](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html) where each user gets their own websocket connection to a LiveView process in the server. And since your users are connected with a websocket, you can push 'live' updates down the socket to the client in real time, and only patch the parts of the DOM that are affected. Now back to forms.
 
 ## Phoenix Forms
 
-Phoenix provides a `Phoenix.Component.form/1` that can be used to render forms. It's a pretty simple component - you pass in a `Phoenix.HTML.Form` struct, and it will render the form for you. Getting the form struct is also trivial - Phoenix gives us a `to_form/1` that can convert a map or an Ecto changeset into a form struct. Effectively, forms are split into two types - map-backed forms and changeset-backed forms. What's the difference? Ecto changesets are a bit more complicated than maps so let's start with map-backed forms.
+Phoenix provides a `Phoenix.Component.form/1` component that can be used to render forms - you pass in a `Phoenix.HTML.Form` struct, and it will render the form for you. Phoenix also gives us a way to get that form struct - it gives us a `to_form/1` method that can convert a map or an Ecto changeset into a form struct. Effectively, forms are split into two types - map-backed forms and changeset-backed forms. What's the difference? Ecto changesets are a bit more complicated than maps so let's start with map-backed forms.
 
-### Map-Backed Forms
+> **What does `/1` mean?**
+> 
+> Elixir uses the `/1` notation to denote the "arity" or number of arguments a function takes. So `foo/1` would take one argument, and `foo/2` would take two arguments. This is because Elixir lets us define multiple functions with the same name in the same module, so it's nice to know what version of a function we're referencing.
+{: .block-tip }
+
+### Map-Backed Forms - Avoid These
+
+> **Warning: Don't Use Map-Backed Forms**
+>
+> If you're skimming this article for how to properly do forms in Phoenix, don't use map-backed forms. I'm going to talk about them to show their flaws and why you shouldn't use them. If you're looking for the right way to do forms in Phoenix, skip to [Performant Changeset-Backed Forms](https://surrsurus.github.io/elixir/phoenix/ui/2024/03/13/phoenix-typed-forms-pt-1.html#performant-changeset-backed-forms).
+{: .block-danger }
 
 Say we have a schema for an order in our database. A super basic version of this schema would look like this:
 
@@ -40,7 +52,7 @@ defmodule Order do
 end
 {% endhighlight %}
 
-Here, we're using [Ecto](https://hexdocs.pm/ecto/Ecto.html) to define a schema for our order. Ecto is powerful and we'll get more into it later, but you won't see exactly why that is just from this tiny little schema. Now, we want to create a form to capture an order from a Phoenix web app, and then save them off to our database.
+Here, we're using [Ecto](https://hexdocs.pm/ecto/Ecto.html) to define a schema for our order. Ecto is powerful but we'll talk about why later, you won't see the power of Ecto just from this tiny little schema. Now, we want to create a form to capture an order from a Phoenix web app, and then save them off to our database.
 
 The most basic way to create a form is to use a map to represent the fields you want to capture. If we wanted to create a map-backed form for our order schema, we'd start with a map that looks like this:
 
@@ -48,7 +60,7 @@ The most basic way to create a form is to use a map to represent the fields you 
 order_map = %{"id" => "", "qty" => ""}
 {% endhighlight %}
 
-A map is just a key-value collection. Now, we'll pass this into `to_form/1` to get a form struct. From experience, `to_form/1` won't care about the values of the map, just the keys, so they can just be blank, so we can pass this map into `to_form/1` and it will give us a form struct. Let's put this together in a LiveView:
+A map is just a key-value collection, kind of like a Javascript object or a Python hash map. Now, we'll pass this into `to_form/1` to get a form struct. From experience, `to_form/1` won't care about the values of the map, just the keys, so they can just be blank, so we can pass this map into `to_form/1` and it will give us a form struct. Let's put this together in a LiveView:
 
 {% highlight elixir %}
 # order_live.ex
@@ -120,7 +132,7 @@ And this is the biggest downside to using a map-backed form - you're left to han
 order_map = %{"id" => "", "qty" => ""}
 {% endhighlight %}
 
-This is a revealing line of code that to me signals we're headed down the wrong path. We're duplicating the knowledge of our database schema in our frontend code. If our schema ever changes, our form will break instantly and we'll need to update code in a lot of places to accommodate that change. A small change to the schema might mean a lot more work for us.
+This is a revealing line of code that to me signals we're headed down the wrong path and map-backed forms are not the way to go about this. We're duplicating the knowledge of our database schema in our frontend code. If our schema ever changes, our form will break instantly and we'll need to update code in a lot of places to accommodate that change. A small change to the schema might mean a lot more work for us.
 
 So how could we make map-backed forms better? There might be a way to just pull out the fields from the struct and use that to create the map we back the form with. We might even be able to use `Map.from_struct/1` to make things easy. But this doesn't completely solve the issue of leaking the schema - we still need to know the types to cast to before we can insert into the database. What if I could define my form's types and validation rules in one place, and have the form handle the rest for me? Ecto has some more tricks up it's sleeve that can help us out here, and that's where our changeset-backed form comes in.
 
@@ -299,8 +311,8 @@ And you might also notice, we don't need to specifically handle errors! We can j
 
 ## Conclusion
 
-So we've seen how we can use changesets to power our forms in Phoenix. We can use the changeset to validate and cast our form inputs, and then our form can render any errors if present in the changeset. Best of all, we can do this in a way that lets us be performant and keep our frontends uncoupled with our database schemas. I would definitely advise you to jump right for the changeset-backed forms, and avoid the map-backed forms. Changeset-backed forms still work even when you don't have a database or want to use it for your forms.
+So we've seen how we can use changesets to power our forms in Phoenix. We can use the changeset to validate and cast our form inputs, and then our form can render any errors if present in the changeset. Best of all, we can do this in a way that lets us be performant and keep our frontends uncoupled with our database schemas. I would definitely advise you to jump right for the changeset-backed forms, and completely avoid the map-backed forms. Changeset-backed forms still work even when you don't have a database.
 
 This is awesome, but we could go further - any other forms we make are going to want that same method to validating and casting inputs. We don't want to copy around the same behavior everywhere, if the behavior for forms needs to be updated or have a feature added, we'd have to change it in a lot of places. Thankfully Elixir has a great way to handle this - macros.
 
-In the next post, I'll talk about how we can extract this behavior into a macro we can use across all of our forms. 
+In the next [post](https://surrsurus.github.io/elixir/phoenix/ui/2024/03/14/phoenix-typed-forms-pt-2.html), I'll talk about how we can extract this behavior into a macro we can use across all of our forms. 
