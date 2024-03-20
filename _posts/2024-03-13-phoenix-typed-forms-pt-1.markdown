@@ -139,7 +139,7 @@ order_map = %{"id" => "", "qty" => ""}
 
 We're duplicating the knowledge of the schema and letting it's structure leak into our frontend, which is coupling them. Our frontend needs to implicitly know the types of the fields in the schema, so it can map the form data. Then, the frontend is also doing it's own validation of the data - in multiple places. We also then have to insert our order or show the user errors if possible. 
 
-That's a lot of responsibilities for a LiveView, on top of it's usual responsibilities such as tracking state, handling events, and rendering the UI. This is just a mess, we balled everything up and threw it into the frontend code. If our schema ever changes in the slightest, our form will break and we'll need to update code in many places to accommodate that change. 
+That's a lot of responsibilities for a LiveView, on top of it's usual responsibilities such as tracking state, handling events, and rendering the UI. This is just a mess, we balled everything up and threw it into the frontend code. There is a complete lack of context separation. If our schema ever changes in the slightest, our form will break and we'll need to update code in many places to accommodate that change. 
 
 The problem with maps is that they are entirely un-opinionated, and you're left to solve all of the challenges above as a one-off each time. But changesets provide a framework that, while it takes time to learn, give us a clean strategy for separating these concerns, and enabling code reuse.
 
